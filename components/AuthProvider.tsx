@@ -5,7 +5,9 @@ import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { useRouter, usePathname } from 'next/navigation'
+import { UserPermissions, UserRole, Department } from '../types'
 
+// Extendemos la interfaz User localmente para asegurar compatibilidad completa
 export interface User {
   id: string
   email: string
@@ -14,6 +16,7 @@ export interface User {
   department: string
   role: string
   isActive: boolean
+  permissions?: UserPermissions
 }
 
 interface AuthContextType {
@@ -34,6 +37,15 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
+const defaultPermissions: UserPermissions = {
+  canCreateTasks: true,
+  canDeleteTasks: false,
+  canAssignTasks: false,
+  canManageUsers: false,
+  canViewAllTasks: false,
+  canManageAutomations: false,
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
@@ -52,7 +64,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         try {
           const userDoc = await getDoc(doc(db, 'users', fbUser.uid))
-          console.log('AuthProvider: Documento de usuario existe?', userDoc.exists())
           
           if (userDoc.exists()) {
             const userData = userDoc.data()
@@ -64,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               department: userData.department || 'general',
               role: userData.role || 'operativo',
               isActive: userData.isActive ?? true,
+              permissions: userData.permissions || defaultPermissions,
             })
 
             // Actualizar último login (sin await para no bloquear)
@@ -71,16 +83,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               lastLogin: serverTimestamp(),
             }).catch(err => console.error('Error actualizando lastLogin:', err))
 
-            console.log('AuthProvider: Usuario cargado, redirigiendo a dashboard')
+            console.log('AuthProvider: Usuario cargado')
             setLoading(false)
             
             if (pathname === '/auth' || pathname === '/') {
               router.push('/dashboard')
             }
           } else {
-            // Usuario autenticado pero sin documento en Firestore
-            // Esto puede pasar si el registro falló a medias
-            console.log('AuthProvider: Usuario sin documento, creando uno básico')
+            // Usuario autenticado pero sin documento en Firestore (Edge case)
+            console.log('AuthProvider: Usuario sin documento, usando defaults')
             setUser({
               id: fbUser.uid,
               email: fbUser.email || '',
@@ -89,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               department: 'general',
               role: 'operativo',
               isActive: true,
+              permissions: defaultPermissions,
             })
             setLoading(false)
             
@@ -98,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } catch (error) {
           console.error('AuthProvider: Error cargando datos de usuario:', error)
-          // Aún así dejamos entrar al usuario con datos básicos
+          // Fallback seguro
           setUser({
             id: fbUser.uid,
             email: fbUser.email || '',
@@ -107,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             department: 'general',
             role: 'operativo',
             isActive: true,
+            permissions: defaultPermissions,
           })
           setLoading(false)
           

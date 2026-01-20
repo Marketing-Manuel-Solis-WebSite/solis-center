@@ -1,24 +1,24 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../components/AuthProvider'
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage } from '../../lib/firebase'
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, where } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import { sendTaskNotification } from '../../lib/email'
 import ProfileModal from '../../components/ProfileModal'
 import AdminUsersPanel from '../../components/AdminUsersPanel'
 import OrganigramaComponent from '../../components/OrganigramaComponent'
+import { Report, Department } from '../../types'
 
 // ==================== TIPOS ====================
 type TaskStatus = 'to_do' | 'in_progress' | 'review' | 'done'
 type TaskPriority = 'urgent' | 'high' | 'normal' | 'low'
 type ViewMode = 'kanban' | 'list' | 'calendar'
 
+interface ActivityLog { id: string; action: string; field?: string; oldValue?: string; newValue?: string; userId: string; userName: string; timestamp: number }
 interface Subtask { id: string; title: string; completed: boolean; createdAt: number }
 interface Comment { id: string; text: string; authorId: string; authorName: string; authorAvatar: string; createdAt: number }
 interface Attachment { id: string; name: string; url: string; type: string; size: number; uploadedBy: string; uploadedByName: string; uploadedAt: number }
-interface ActivityLog { id: string; action: string; field?: string; oldValue?: string; newValue?: string; userId: string; userName: string; timestamp: number }
 
 interface Task {
   id: string; title: string; description: string; status: TaskStatus; priority: TaskPriority
@@ -59,34 +59,426 @@ const Icons = {
   Check: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>,
   MessageCircle: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>,
   ListTodo: () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>,
-  Send: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
   Search: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
   Filter: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
   Grid: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
   List: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
   Mail: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
   Paperclip: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>,
-  Activity: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
-  Settings: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
-  Download: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
-  Upload: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
-  File: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
-  Image: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>,
-  Play: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
-  User: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  FileText: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
+  BrainCircuit: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.97-4.929"/><path d="M17.97 13.071A4 4 0 0 1 16 18"/></svg>,
   GitBranch: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>,
   Briefcase: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>,
   UserCog: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><circle cx="19" cy="11" r="2"/><path d="M19 8v1"/><path d="M19 13v1"/><path d="m21.6 9.5-.87.5"/><path d="m17.27 12-.87.5"/><path d="m21.6 12.5-.87-.5"/><path d="m17.27 10-.87-.5"/></svg>,
+  TrendingUp: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  Eye: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  FilePlus: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
+  Save: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
 }
 
 // ==================== UTILIDADES ====================
 const generateId = () => Math.random().toString(36).substring(2, 15)
 const formatDate = (timestamp: number) => { const date = new Date(timestamp); const now = new Date(); const diff = now.getTime() - date.getTime(); const minutes = Math.floor(diff / 60000); const hours = Math.floor(diff / 3600000); const days = Math.floor(diff / 86400000); if (minutes < 1) return 'Ahora'; if (minutes < 60) return `Hace ${minutes}m`; if (hours < 24) return `Hace ${hours}h`; if (days < 7) return `Hace ${days}d`; return date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) }
 const formatDateFull = (dateStr: string | null) => { if (!dateStr) return '-'; const date = new Date(dateStr); return date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }) }
-const formatFileSize = (bytes: number) => { if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / (1024 * 1024)).toFixed(1) + ' MB' }
-const getFileIcon = (type: string) => { if (type.startsWith('image/')) return <Icons.Image />; if (type.startsWith('video/')) return <Icons.Play />; return <Icons.File /> }
 
-// ==================== COMPONENTE CALENDARIO ====================
+// ==================== COMPONENTES DE VISTA ====================
+
+// --- MODAL DE CREACIÓN DE REPORTES (EXCEL-LIKE) ---
+function CreateReportModal({ isOpen, onClose, user }: { isOpen: boolean; onClose: () => void; user: any }) {
+  const [loading, setLoading] = useState(false)
+  const [formData, setFormData] = useState({
+    title: '',
+    type: 'diario' as Report['type'],
+    dateRange: new Date().toLocaleDateString('es-MX'),
+    department: user.department as Department
+  })
+  
+  // Lista dinámica de métricas (Filas del reporte)
+  const [metrics, setMetrics] = useState<{ id: string; label: string; value: string; trend?: string }[]>([
+    { id: '1', label: '', value: '' } // Fila inicial vacía
+  ])
+
+  // Resetear form al abrir
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        title: '',
+        type: 'diario',
+        dateRange: new Date().toLocaleDateString('es-MX'),
+        department: user.department as Department
+      })
+      setMetrics([{ id: generateId(), label: '', value: '' }])
+    }
+  }, [isOpen, user.department])
+
+  const handleAddRow = () => {
+    setMetrics([...metrics, { id: generateId(), label: '', value: '' }])
+  }
+
+  const handleRemoveRow = (id: string) => {
+    if (metrics.length > 1) {
+      setMetrics(metrics.filter(m => m.id !== id))
+    }
+  }
+
+  const handleMetricChange = (id: string, field: 'label' | 'value' | 'trend', newValue: string) => {
+    setMetrics(metrics.map(m => m.id === id ? { ...m, [field]: newValue } : m))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    // Filtrar métricas vacías
+    const validMetrics = metrics.filter(m => m.label.trim() !== '' && m.value.trim() !== '')
+
+    if (validMetrics.length === 0) {
+      alert('Debes agregar al menos una métrica válida.')
+      setLoading(false)
+      return
+    }
+
+    try {
+      const newReport: Omit<Report, 'id'> = {
+        title: formData.title,
+        type: formData.type,
+        department: formData.department,
+        createdBy: { id: user.id, name: user.name, avatar: user.avatar },
+        createdAt: Date.now(), // Guardamos timestamp numérico para facilitar ordenamiento
+        dateRange: formData.dateRange,
+        metrics: validMetrics.map(({ label, value, trend }) => ({ label, value, trendValue: trend })),
+        status: 'pending', // Inicialmente pendiente de análisis por IA
+        aiAnalysis: '' // Vacío hasta que Nora lo procese
+      }
+
+      await addDoc(collection(db, 'reports'), newReport)
+      onClose()
+    } catch (error) {
+      console.error("Error creating report:", error)
+      alert("Hubo un error al guardar el reporte.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+      <div style={{ width: '100%', maxWidth: '700px', background: '#12121a', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Icons.FilePlus /> Nuevo Reporte Operativo
+          </h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}><Icons.X /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* Metadata del Reporte */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px', padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Título del Reporte</label>
+              <input 
+                type="text" 
+                required 
+                placeholder="Ej. Cierre Semanal Ventas" 
+                value={formData.title}
+                onChange={e => setFormData({...formData, title: e.target.value})}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0a0f', color: 'white', fontSize: '13px' }} 
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Tipo</label>
+              <select 
+                value={formData.type}
+                onChange={e => setFormData({...formData, type: e.target.value as any})}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0a0f', color: 'white', fontSize: '13px' }}
+              >
+                <option value="diario">Diario</option>
+                <option value="semanal">Semanal</option>
+                <option value="mensual">Mensual</option>
+                <option value="incidente">Incidente</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>Fecha / Rango</label>
+              <input 
+                type="text" 
+                value={formData.dateRange}
+                onChange={e => setFormData({...formData, dateRange: e.target.value})}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0a0f', color: 'white', fontSize: '13px' }} 
+              />
+            </div>
+          </div>
+
+          {/* Sección Dinámica (Excel-like) */}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 500, color: 'rgba(255,255,255,0.8)' }}>Datos y Métricas</h3>
+              <button type="button" onClick={handleAddRow} style={{ fontSize: '11px', color: '#8b5cf6', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer' }}>+ Agregar Fila</button>
+            </div>
+            
+            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+              {/* Header Tabla */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 40px', gap: '1px', background: 'rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ padding: '8px 12px', fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>CONCEPTO / MÉTRICA</div>
+                <div style={{ padding: '8px 12px', fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>VALOR</div>
+                <div style={{ padding: '8px 12px', fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>TENDENCIA (Opcional)</div>
+                <div style={{ background: '#12121a' }}></div>
+              </div>
+
+              {/* Rows */}
+              {metrics.map((metric, index) => (
+                <div key={metric.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 40px', gap: '1px', background: 'rgba(255,255,255,0.05)' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Ej. Total Llamadas" 
+                    value={metric.label}
+                    onChange={e => handleMetricChange(metric.id, 'label', e.target.value)}
+                    style={{ background: '#1a1a24', border: 'none', padding: '10px 12px', color: 'white', fontSize: '13px', outline: 'none' }}
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Ej. 1,250" 
+                    value={metric.value}
+                    onChange={e => handleMetricChange(metric.id, 'value', e.target.value)}
+                    style={{ background: '#1a1a24', border: 'none', padding: '10px 12px', color: 'white', fontSize: '13px', outline: 'none' }}
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Ej. +5% vs ayer" 
+                    value={metric.trend || ''}
+                    onChange={e => handleMetricChange(metric.id, 'trend', e.target.value)}
+                    style={{ background: '#1a1a24', border: 'none', padding: '10px 12px', color: 'rgba(255,255,255,0.7)', fontSize: '13px', outline: 'none' }}
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => handleRemoveRow(metric.id)}
+                    style={{ background: '#1a1a24', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    className="hover:text-red-400"
+                  >
+                    <Icons.Trash />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '8px' }}>
+              * Esta información será procesada por Nora para detectar patrones y anomalías.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>Cancelar</button>
+            <button 
+              type="submit" 
+              disabled={loading}
+              style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', color: 'white', fontSize: '14px', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            >
+              {loading ? 'Guardando...' : <><Icons.Save /> Guardar Reporte</>}
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function ReportsView() {
+  const { user } = useAuth()
+  const [reports, setReports] = useState<Report[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+
+  // Fetch Reports Real-Time from Firestore
+  useEffect(() => {
+    if (!user) return
+
+    // Query básica: traer todos los reportes ordenados por fecha
+    // En producción se podría filtrar por departamento si el usuario no es admin/directivo
+    const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedReports = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Report[]
+      setReports(fetchedReports)
+      setLoading(false)
+    }, (error) => {
+      console.error("Error fetching reports:", error)
+      setLoading(false)
+    })
+
+    return () => unsubscribe()
+  }, [user])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      
+      {/* SECCIÓN: EL ORÁCULO (NORA) */}
+      <div style={{ 
+        background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)', 
+        borderRadius: '20px', 
+        border: '1px solid rgba(99,102,241,0.3)', 
+        padding: '24px',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', position: 'relative', zIndex: 2 }}>
+          <div style={{ 
+            width: '48px', height: '48px', 
+            borderRadius: '12px', 
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', 
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 20px rgba(99,102,241,0.5)'
+          }}>
+            <Icons.BrainCircuit />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'white', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              Insights de Nora
+              <span style={{ fontSize: '10px', background: 'rgba(34,197,94,0.2)', color: '#4ade80', padding: '2px 8px', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.3)' }}>IA ACTIVA</span>
+            </h2>
+            <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', lineHeight: '1.5' }}>
+              {reports.length > 0 
+                ? "He analizado los últimos datos ingresados. Detecto una correlación positiva entre el aumento de reportes detallados y la velocidad de respuesta del equipo. Mantengan el flujo de datos constante para mejorar mis predicciones."
+                : "Aún no hay suficientes datos para generar insights profundos. Comienza creando tu primer reporte operativo."}
+            </p>
+          </div>
+        </div>
+        {/* Decorative background elements */}
+        <div style={{ position: 'absolute', top: '-50%', right: '-10%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%)', filter: 'blur(40px)', zIndex: 1 }} />
+      </div>
+
+      {/* LISTA DE REPORTES */}
+      <div style={{ borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(18,18,26,0.8)', overflow: 'hidden' }}>
+        <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Historial de Reportes</h3>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button style={{ fontSize: '12px', padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Icons.Filter /> Filtrar
+            </button>
+            <button 
+              onClick={() => setShowCreateModal(true)}
+              style={{ fontSize: '12px', padding: '8px 12px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', borderRadius: '8px', border: 'none', color: 'white', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+            >
+              <Icons.Plus /> Nuevo Reporte
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {/* Header Tabla */}
+          <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr 2fr 1.5fr 1fr', padding: '12px 24px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+            <div>Reporte / Análisis IA</div>
+            <div>Creado Por</div>
+            <div>Departamento / Fechas</div>
+            <div>Métricas Clave</div>
+            <div style={{ textAlign: 'right' }}>Acciones</div>
+          </div>
+
+          {/* Estado de carga */}
+          {loading && (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
+              Cargando reportes del sistema...
+            </div>
+          )}
+
+          {/* Estado vacío */}
+          {!loading && reports.length === 0 && (
+            <div style={{ padding: '60px', textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>
+              <Icons.FileText />
+              <p style={{ marginTop: '10px', fontSize: '14px' }}>No hay reportes registrados aún.</p>
+              <button onClick={() => setShowCreateModal(true)} style={{ marginTop: '12px', color: '#8b5cf6', background: 'none', border: 'none', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}>Crear el primero</button>
+            </div>
+          )}
+
+          {/* Rows */}
+          {reports.map((report) => (
+            <div key={report.id} style={{ display: 'grid', gridTemplateColumns: '3fr 2fr 2fr 1.5fr 1fr', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', alignItems: 'start', transition: 'background 0.2s' }} className="hover:bg-white/5">
+              
+              {/* Col 1: Titulo y IA */}
+              <div style={{ paddingRight: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>{report.title}</span>
+                  {report.status === 'analyzed' && <span title="Analizado por Nora" style={{ fontSize: '10px', color: '#8b5cf6', background: 'rgba(139,92,246,0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(139,92,246,0.2)' }}>IA</span>}
+                  {report.status === 'pending' && <span title="Esperando análisis" style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>Pendiente</span>}
+                </div>
+                {report.aiAnalysis ? (
+                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', background: 'rgba(139,92,246,0.05)', padding: '8px', borderRadius: '8px', borderLeft: '2px solid #8b5cf6', fontStyle: 'italic' }}>
+                    {report.aiAnalysis}
+                  </p>
+                ) : (
+                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                    Esperando procesamiento de IA...
+                  </p>
+                )}
+              </div>
+
+              {/* Col 2: Creador */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #64748b, #475569)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 600 }}>
+                  {report.createdBy?.avatar || 'U'}
+                </div>
+                <div>
+                  <p style={{ fontSize: '13px', color: 'white' }}>{report.createdBy?.name || 'Usuario'}</p>
+                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
+                    {typeof report.createdAt === 'number' 
+                      ? formatDate(report.createdAt)
+                      : 'Fecha desconocida'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Col 3: Dept y Fecha */}
+              <div>
+                <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)', marginBottom: '4px', textTransform: 'capitalize' }}>
+                  {departmentLabels[report.department] || report.department}
+                </span>
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>{report.type ? report.type.charAt(0).toUpperCase() + report.type.slice(1) : 'Reporte'} • {report.dateRange}</p>
+              </div>
+
+              {/* Col 4: Métricas */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {report.metrics?.slice(0, 3).map((metric, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{metric.label}:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: 'white', fontWeight: 500 }}>{metric.value}</span>
+                      {metric.trendValue && <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)' }}>({metric.trendValue})</span>}
+                    </div>
+                  </div>
+                ))}
+                {(report.metrics?.length || 0) > 3 && (
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginTop: '2px' }}>+{report.metrics!.length - 3} métricas más...</div>
+                )}
+              </div>
+
+              {/* Col 5: Acciones */}
+              <div style={{ textAlign: 'right' }}>
+                <button 
+                  onClick={() => deleteDoc(doc(db, 'reports', report.id))}
+                  style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: '6px', borderRadius: '6px' }} 
+                  className="hover:bg-red-500/10 hover:text-red-400"
+                  title="Eliminar reporte"
+                >
+                  <Icons.Trash />
+                </button>
+              </div>
+
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <CreateReportModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} user={user} />
+    </div>
+  )
+}
+
 function CalendarView({ tasks, onTaskClick, currentDate, setCurrentDate }: { tasks: Task[]; onTaskClick: (task: Task) => void; currentDate: Date; setCurrentDate: (date: Date) => void }) {
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay()
@@ -288,6 +680,7 @@ export default function Dashboard() {
   const navigation = [
     { name: 'Dashboard', icon: Icons.LayoutDashboard, desc: 'Vista general de entregas' },
     { name: 'Mis Tareas', icon: Icons.CheckSquare, desc: 'Solo tareas asignadas a ti' },
+    { name: 'Reportes & IA', icon: Icons.FileText, desc: 'Análisis y predicciones de Nora' }, // NUEVO
     { name: 'Mi Equipo', icon: Icons.Briefcase, desc: 'Tareas de tu departamento' },
     { name: 'Equipo', icon: Icons.Users, desc: 'Miembros del equipo' },
     { name: 'Organigrama', icon: Icons.GitBranch, desc: 'Estructura organizacional' },
@@ -387,10 +780,13 @@ export default function Dashboard() {
             <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
               {activeNav === 'Dashboard' && 'Vista general de todas las entregas'}
               {activeNav === 'Mis Tareas' && 'Tareas asignadas a ti'}
+              {activeNav === 'Reportes & IA' && 'Centro de inteligencia operativa'}
               {activeNav === 'Mi Equipo' && `Tareas del departamento de ${departmentLabels[user.department]}`}
             </p>
           </div>
-          <button onClick={() => setShowCreateModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', padding: '10px 20px', fontSize: '13px', fontWeight: 500, color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 4px 20px rgba(99,102,241,0.3)' }}><Icons.Plus />Nueva Tarea</button>
+          {activeNav !== 'Reportes & IA' && (
+            <button onClick={() => setShowCreateModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', padding: '10px 20px', fontSize: '13px', fontWeight: 500, color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 4px 20px rgba(99,102,241,0.3)' }}><Icons.Plus />Nueva Tarea</button>
+          )}
         </header>
         
         <main style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
@@ -440,6 +836,11 @@ export default function Dashboard() {
                 {viewMode === 'calendar' && <CalendarView tasks={filteredTasks} onTaskClick={(task) => { setSelectedTask(task) }} currentDate={currentDate} setCurrentDate={setCurrentDate} />}
               </div>
             </div>
+          )}
+
+          {/* NUEVA VISTA: REPORTES & IA */}
+          {activeNav === 'Reportes & IA' && (
+            <ReportsView />
           )}
 
           {/* Equipo */}

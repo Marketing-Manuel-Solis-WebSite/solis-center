@@ -3,7 +3,16 @@ import { Timestamp } from 'firebase/firestore'
 // ==================== USUARIOS Y ROLES ====================
 
 export type UserRole = 'director' | 'gerente' | 'lider' | 'operativo'
-export type Department = 'marketing' | 'openers' | 'closers' | 'admin' | 'finanzas'
+export type Department = 'marketing' | 'openers' | 'closers' | 'admin' | 'finanzas' | 'general'
+
+export interface UserPermissions {
+  canCreateTasks: boolean
+  canDeleteTasks: boolean
+  canAssignTasks: boolean
+  canManageUsers: boolean
+  canViewAllTasks: boolean
+  canManageAutomations: boolean
+}
 
 export interface User {
   id: string
@@ -12,6 +21,7 @@ export interface User {
   avatar?: string
   role: UserRole
   department: Department
+  permissions?: UserPermissions // Añadido para corregir el error TS
   createdAt: Timestamp
   lastLogin: Timestamp
   isActive: boolean
@@ -58,8 +68,20 @@ export interface Task {
   order: number // Para ordenamiento en vistas
   attachments: Attachment[]
   comments: Comment[]
+  activityLog?: ActivityLog[]
   createdAt: Timestamp
   updatedAt: Timestamp
+}
+
+export interface ActivityLog {
+  id: string
+  action: string
+  field?: string
+  oldValue?: string
+  newValue?: string
+  userId: string
+  userName: string
+  timestamp: number
 }
 
 export interface Attachment {
@@ -118,6 +140,24 @@ export interface StatusConfig {
 }
 
 // ==================== REPORTES DIARIOS ====================
+
+export interface Report {
+  id: string
+  title: string
+  type: 'diario' | 'semanal' | 'mensual' | 'incidente'
+  department: Department
+  createdBy: UserRef
+  createdAt: any // Timestamp or Date
+  dateRange: string
+  metrics: {
+    label: string
+    value: string | number
+    trend?: 'up' | 'down' | 'neutral'
+    trendValue?: string
+  }[]
+  aiAnalysis?: string // Análisis de Nora
+  status: 'pending' | 'analyzed' | 'archived'
+}
 
 export interface BaseReport {
   id: string
