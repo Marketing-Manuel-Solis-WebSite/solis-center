@@ -33,7 +33,7 @@ export interface UserRef {
   avatar?: string
 }
 
-// ==================== SISTEMA DE TAREAS (CLICKUP CLONE) ====================
+// ==================== SISTEMA DE TAREAS ====================
 
 export type TaskStatus = 'to_do' | 'in_progress' | 'review' | 'done' | 'blocked'
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low'
@@ -54,7 +54,7 @@ export interface Task {
   priority: TaskPriority
   assignees: UserRef[]
   createdBy: UserRef
-  dueDate: Timestamp | null
+  dueDate: string | null
   timeEstimate: number
   timeTracked: number
   dependencies: string[]
@@ -62,15 +62,27 @@ export interface Task {
   linkedReportId?: string
   parentTaskId?: string
   department: Department
-  spaceId: string
+  spaceId?: string
   folderId?: string
-  listId: string
-  order: number
+  listId?: string
+  order?: number
   attachments: Attachment[]
   comments: Comment[]
   activityLog?: ActivityLog[]
-  createdAt: Timestamp
-  updatedAt: Timestamp
+  createdAt: any
+  updatedAt: any
+  subtasks?: Subtask[]
+  assigneeId?: string | null
+  assigneeName?: string | null
+  assigneeAvatar?: string | null
+  createdByName?: string
+}
+
+export interface Subtask { 
+  id: string; 
+  title: string; 
+  completed: boolean; 
+  createdAt: number 
 }
 
 export interface ActivityLog {
@@ -96,27 +108,17 @@ export interface Attachment {
 
 export interface Comment {
   id: string
-  content: string
+  content?: string
+  text?: string
   author: UserRef
-  createdAt: Timestamp
+  authorId?: string
+  authorName?: string
+  authorAvatar?: string
+  createdAt: any
   updatedAt?: Timestamp
 }
 
-// ==================== DOCUMENTOS (NUEVO) ====================
-
-export interface Document {
-  id: string
-  title: string
-  url: string
-  storagePath: string // Para poder eliminarlo de Storage
-  type: string // MIME type (application/pdf, etc)
-  size: number // en bytes
-  department: Department
-  createdBy: UserRef
-  createdAt: any // Timestamp o number
-}
-
-// ==================== JERARQUÍA: SPACE > FOLDER > LIST ====================
+// ==================== WORKSPACE (ESTO SOLUCIONA EL ERROR EN STORES) ====================
 
 export interface Space {
   id: string
@@ -153,7 +155,25 @@ export interface StatusConfig {
   order: number
 }
 
-// ==================== REPORTES DIARIOS ====================
+// ==================== DOCUMENTOS ====================
+
+export interface Document {
+  id: string
+  title: string
+  url: string
+  storagePath: string
+  type: string
+  size: number
+  department: Department
+  createdBy: UserRef
+  createdAt: any
+  aiStatus: 'pending' | 'processing' | 'indexed' | 'error'
+  aiSummary?: string
+  aiTags?: string[]
+  aiEmbeddingId?: string
+}
+
+// ==================== REPORTES ====================
 
 export interface Report {
   id: string
@@ -173,87 +193,51 @@ export interface Report {
   status: 'pending' | 'analyzed' | 'archived'
 }
 
-export interface BaseReport {
+// ==================== FORMULARIOS ====================
+
+export interface FormField {
   id: string
-  date: Timestamp
-  submittedBy: UserRef
-  department: Department
-  createdAt: Timestamp
-  notes?: string
+  type: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'email'
+  label: string
+  required: boolean
+  options?: string[]
+  placeholder?: string
 }
 
-export interface MarketingReport extends BaseReport {
-  department: 'marketing'
-  data: {
-    adSpendTotal: number
-    currency: 'MXN' | 'USD'
-    breakdownChannel: {
-      meta: number
-      google: number
-      tiktok: number
-      other: number
-    }
-    impressions: number
-    clicks: number
-    rawLeads: number
-    cpl: number
-  }
-}
-
-export interface OpenersReport extends BaseReport {
-  department: 'openers'
-  data: {
-    leadsAssigned: number
-    dialsMade: number
-    connectRate: number
-    appointmentsSet: number
-    showRatePrediction: 'alta' | 'media' | 'baja'
-    leadsNotContacted: number
-  }
-}
-
-export interface ClosersReport extends BaseReport {
-  department: 'closers'
-  data: {
-    appointmentsTaken: number
-    offersMade: number
-    dealsClosed: number
-    revenueGenerated: number
-    cashCollected: number
-    conversionRate: number
-  }
-}
-
-export type DailyReport = MarketingReport | OpenersReport | ClosersReport
-
-// ==================== ALERTAS Y NOTIFICACIONES ====================
-
-export type AlertSeverity = 'info' | 'warning' | 'critical'
-export type AlertSource = 'nora' | 'system' | 'user'
-
-export interface Alert {
+export interface FormTemplate {
   id: string
   title: string
-  message: string
-  severity: AlertSeverity
-  source: AlertSource
-  targetDepartment?: Department
-  targetUsers?: string[]
-  linkedTaskId?: string
-  isRead: boolean
-  createdAt: Timestamp
+  description: string
+  fields: FormField[]
+  notifyEmail: string
+  targetAudience: 'public' | 'internal' | Department
+  isActive: boolean
+  createdBy: UserRef
+  createdAt: any
 }
 
-// ==================== PREDICCIONES (NORA) ====================
-
-export interface Prediction {
+export interface FormSubmission {
   id: string
-  type: 'financial' | 'anomaly' | 'recommendation'
-  title: string
+  formId: string
+  formTitle: string
+  data: Record<string, string | number>
+  submittedBy?: UserRef | 'anonymous'
+  submittedAt: any
+}
+
+// ==================== SOCIAL INBOX (REALISTA) ====================
+
+export type SocialPlatform = 'whatsapp' | 'facebook' | 'instagram' | 'tiktok' | 'messenger'
+
+export interface SocialMessage {
+  id: string
+  platform: SocialPlatform
+  senderName: string
+  senderHandle?: string
+  senderAvatar?: string
   content: string
-  confidence: number
-  basedOnDays: number
-  generatedAt: Timestamp
-  expiresAt: Timestamp
-  metadata: Record<string, unknown>
+  timestamp: string // Formato legible para UI
+  status: 'unread' | 'read' | 'replied'
+  leadScore?: number // Calificación del lead (1-100)
+  intent?: 'consulta_legal' | 'precios' | 'queja' | 'general'
 }

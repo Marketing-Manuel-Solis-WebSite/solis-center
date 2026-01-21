@@ -69,7 +69,6 @@ export default function OrganigramaComponent() {
         role: doc.data().role || 'operativo',
         email: doc.data().email || '',
       })) as TeamMember[]
-      // Ordenar por rol
       members.sort((a, b) => (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99))
       setTeamMembers(members)
       setLoading(false)
@@ -77,19 +76,16 @@ export default function OrganigramaComponent() {
     return () => unsubscribe()
   }, [])
 
-  // Agrupar por departamento
   const byDepartment = teamMembers.reduce((acc, m) => {
     if (!acc[m.department]) acc[m.department] = []
     acc[m.department].push(m)
     return acc
   }, {} as Record<string, TeamMember[]>)
 
-  // Agrupar por nivel jerárquico
   const directors = teamMembers.filter(m => m.role === 'director' || m.role === 'gerente')
   const supervisors = teamMembers.filter(m => m.role === 'supervisor' || m.role === 'lider')
   const operatives = teamMembers.filter(m => m.role === 'operativo')
 
-  // Stats
   const stats = {
     total: teamMembers.length,
     departments: Object.keys(byDepartment).length,
@@ -138,14 +134,14 @@ export default function OrganigramaComponent() {
 
       {/* Hierarchy View */}
       {viewMode === 'hierarchy' && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0px' }}>
           {/* Nivel 1: Directores/Gerentes */}
           {directors.length > 0 && (
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ textAlign: 'center', position: 'relative' }}>
               <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>Dirección</p>
-              <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap', zIndex: 2, position: 'relative' }}>
                 {directors.map(member => (
-                  <div key={member.id} style={{ padding: '20px', borderRadius: '16px', background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15))', border: '1px solid rgba(99,102,241,0.3)', textAlign: 'center', minWidth: '160px' }}>
+                  <div key={member.id} style={{ padding: '20px', borderRadius: '16px', background: '#12121a', border: '1px solid rgba(99,102,241,0.5)', textAlign: 'center', minWidth: '160px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
                     <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 700, margin: '0 auto 12px', boxShadow: '0 4px 16px rgba(99,102,241,0.4)' }}>{member.avatar}</div>
                     <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>{member.name}</p>
                     <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>{roleLabels[member.role]}</p>
@@ -153,11 +149,12 @@ export default function OrganigramaComponent() {
                   </div>
                 ))}
               </div>
-              {/* Línea conectora */}
-              {(supervisors.length > 0 || operatives.length > 0) && (
-                <div style={{ width: '2px', height: '32px', background: 'linear-gradient(to bottom, rgba(99,102,241,0.5), rgba(99,102,241,0.1))', margin: '0 auto' }} />
-              )}
             </div>
+          )}
+
+          {/* Línea conectora sólida 1 */}
+          {(directors.length > 0 && (supervisors.length > 0 || operatives.length > 0)) && (
+            <div style={{ width: '2px', height: '40px', background: '#6366f1', margin: '0 auto', opacity: 0.5 }}></div>
           )}
 
           {/* Nivel 2: Supervisores/Líderes */}
@@ -166,7 +163,7 @@ export default function OrganigramaComponent() {
               <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>Supervisores y Líderes</p>
               <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
                 {supervisors.map(member => (
-                  <div key={member.id} style={{ padding: '16px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'center', minWidth: '140px' }}>
+                  <div key={member.id} style={{ padding: '16px', borderRadius: '14px', background: '#12121a', border: '1px solid rgba(255,255,255,0.15)', textAlign: 'center', minWidth: '140px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
                     <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: `linear-gradient(135deg, ${departmentColors[member.department]}, ${departmentColors[member.department]}88)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 600, margin: '0 auto 10px' }}>{member.avatar}</div>
                     <p style={{ fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>{member.name}</p>
                     <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginBottom: '6px' }}>{roleLabels[member.role]}</p>
@@ -174,20 +171,21 @@ export default function OrganigramaComponent() {
                   </div>
                 ))}
               </div>
-              {/* Línea conectora */}
-              {operatives.length > 0 && (
-                <div style={{ width: '2px', height: '32px', background: 'linear-gradient(to bottom, rgba(255,255,255,0.2), rgba(255,255,255,0.05))', margin: '0 auto' }} />
-              )}
             </div>
+          )}
+
+          {/* Línea conectora sólida 2 */}
+          {(supervisors.length > 0 && operatives.length > 0) && (
+            <div style={{ width: '2px', height: '40px', background: 'rgba(255,255,255,0.2)', margin: '0 auto' }}></div>
           )}
 
           {/* Nivel 3: Operativos */}
           {operatives.length > 0 && (
             <div style={{ textAlign: 'center', width: '100%' }}>
               <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>Equipo Operativo</p>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', maxWidth: '900px', margin: '0 auto' }}>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', maxWidth: '1000px', margin: '0 auto' }}>
                 {operatives.map(member => (
-                  <div key={member.id} style={{ padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', textAlign: 'center', minWidth: '120px' }}>
+                  <div key={member.id} style={{ padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'center', minWidth: '120px' }}>
                     <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: `${departmentColors[member.department]}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 600, margin: '0 auto 8px', color: departmentColors[member.department] }}>{member.avatar}</div>
                     <p style={{ fontSize: '12px', fontWeight: 500, marginBottom: '4px' }}>{member.name}</p>
                     <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: '20px', fontSize: '9px', background: `${departmentColors[member.department]}15`, color: departmentColors[member.department] }}>{departmentLabels[member.department]}</span>

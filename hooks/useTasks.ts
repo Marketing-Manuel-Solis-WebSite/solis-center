@@ -17,7 +17,6 @@ import {
 import { db } from '../lib/firebase'
 import { useTaskStore, useAuthStore } from '../stores'
 import type { Task, TaskStatus, TaskPriority, Department } from '../types'
-import { generateId } from '../lib/utils'
 
 export function useTasks(listId?: string) {
   const { tasks, setTasks, addTask, updateTask, deleteTask, setLoading, setError } = useTaskStore()
@@ -63,7 +62,7 @@ export function useTasks(listId?: string) {
       spaceId: string
       listId: string
       folderId?: string
-      dueDate?: Date
+      dueDate?: string // CORRECCIÓN: Usamos string en lugar de Date
     }) => {
       if (!user) throw new Error('Usuario no autenticado')
 
@@ -74,7 +73,7 @@ export function useTasks(listId?: string) {
         priority: data.priority || 'normal',
         assignees: [],
         createdBy: { id: user.id, name: user.name, avatar: user.avatar },
-        dueDate: data.dueDate ? Timestamp.fromDate(data.dueDate) : null,
+        dueDate: data.dueDate || null, // CORRECCIÓN: Asignación directa
         timeEstimate: 0,
         timeTracked: 0,
         dependencies: [],
@@ -86,8 +85,9 @@ export function useTasks(listId?: string) {
         order: tasks.length,
         attachments: [],
         comments: [],
-        createdAt: serverTimestamp() as Timestamp,
-        updatedAt: serverTimestamp() as Timestamp,
+        activityLog: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       }
 
       const docRef = await addDoc(collection(db, 'tasks'), newTask)
