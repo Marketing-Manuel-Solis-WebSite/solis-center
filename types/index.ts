@@ -21,7 +21,7 @@ export interface User {
   avatar?: string
   role: UserRole
   department: Department
-  permissions?: UserPermissions // Añadido para corregir el error TS
+  permissions?: UserPermissions
   createdAt: Timestamp
   lastLogin: Timestamp
   isActive: boolean
@@ -43,7 +43,7 @@ export interface CustomField {
   name: string
   type: 'text' | 'number' | 'currency' | 'dropdown' | 'date' | 'checkbox'
   value: string | number | boolean | null
-  options?: string[] // Para dropdowns
+  options?: string[]
 }
 
 export interface Task {
@@ -55,17 +55,17 @@ export interface Task {
   assignees: UserRef[]
   createdBy: UserRef
   dueDate: Timestamp | null
-  timeEstimate: number // Horas estimadas
-  timeTracked: number // Horas reales
-  dependencies: string[] // IDs de tareas que bloquean esta
+  timeEstimate: number
+  timeTracked: number
+  dependencies: string[]
   customFields: CustomField[]
   linkedReportId?: string
-  parentTaskId?: string // Para subtareas
+  parentTaskId?: string
   department: Department
   spaceId: string
   folderId?: string
   listId: string
-  order: number // Para ordenamiento en vistas
+  order: number
   attachments: Attachment[]
   comments: Comment[]
   activityLog?: ActivityLog[]
@@ -102,6 +102,20 @@ export interface Comment {
   updatedAt?: Timestamp
 }
 
+// ==================== DOCUMENTOS (NUEVO) ====================
+
+export interface Document {
+  id: string
+  title: string
+  url: string
+  storagePath: string // Para poder eliminarlo de Storage
+  type: string // MIME type (application/pdf, etc)
+  size: number // en bytes
+  department: Department
+  createdBy: UserRef
+  createdAt: any // Timestamp o number
+}
+
 // ==================== JERARQUÍA: SPACE > FOLDER > LIST ====================
 
 export interface Space {
@@ -110,7 +124,7 @@ export interface Space {
   icon: string
   color: string
   department: Department
-  members: string[] // User IDs
+  members: string[]
   createdAt: Timestamp
 }
 
@@ -147,7 +161,7 @@ export interface Report {
   type: 'diario' | 'semanal' | 'mensual' | 'incidente'
   department: Department
   createdBy: UserRef
-  createdAt: any // Timestamp or Date
+  createdAt: any
   dateRange: string
   metrics: {
     label: string
@@ -155,7 +169,7 @@ export interface Report {
     trend?: 'up' | 'down' | 'neutral'
     trendValue?: string
   }[]
-  aiAnalysis?: string // Análisis de Nora
+  aiAnalysis?: string
   status: 'pending' | 'analyzed' | 'archived'
 }
 
@@ -182,7 +196,7 @@ export interface MarketingReport extends BaseReport {
     impressions: number
     clicks: number
     rawLeads: number
-    cpl: number // Cost Per Lead (calculado)
+    cpl: number
   }
 }
 
@@ -191,7 +205,7 @@ export interface OpenersReport extends BaseReport {
   data: {
     leadsAssigned: number
     dialsMade: number
-    connectRate: number // Porcentaje
+    connectRate: number
     appointmentsSet: number
     showRatePrediction: 'alta' | 'media' | 'baja'
     leadsNotContacted: number
@@ -206,7 +220,7 @@ export interface ClosersReport extends BaseReport {
     dealsClosed: number
     revenueGenerated: number
     cashCollected: number
-    conversionRate: number // Porcentaje
+    conversionRate: number
   }
 }
 
@@ -237,8 +251,8 @@ export interface Prediction {
   type: 'financial' | 'anomaly' | 'recommendation'
   title: string
   content: string
-  confidence: number // 0-100
-  basedOnDays: number // Días de data analizados
+  confidence: number
+  basedOnDays: number
   generatedAt: Timestamp
   expiresAt: Timestamp
   metadata: Record<string, unknown>

@@ -8,6 +8,7 @@ import { sendTaskNotification } from '../../lib/email'
 import ProfileModal from '../../components/ProfileModal'
 import AdminUsersPanel from '../../components/AdminUsersPanel'
 import OrganigramaComponent from '../../components/OrganigramaComponent'
+import DocumentsView from '../../components/DocumentsView' // <--- IMPORTANTE: Nuevo componente
 import { Report, Department } from '../../types'
 
 // ==================== TIPOS ====================
@@ -74,6 +75,7 @@ const Icons = {
   Eye: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
   FilePlus: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>,
   Save: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+  File: () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>,
 }
 
 // ==================== UTILIDADES ====================
@@ -680,7 +682,8 @@ export default function Dashboard() {
   const navigation = [
     { name: 'Dashboard', icon: Icons.LayoutDashboard, desc: 'Vista general de entregas' },
     { name: 'Mis Tareas', icon: Icons.CheckSquare, desc: 'Solo tareas asignadas a ti' },
-    { name: 'Reportes & IA', icon: Icons.FileText, desc: 'Análisis y predicciones de Nora' }, // NUEVO
+    { name: 'Reportes & IA', icon: Icons.FileText, desc: 'Análisis y predicciones de Nora' },
+    { name: 'Documentos', icon: Icons.File, desc: 'Repositorio de archivos' }, // <--- NUEVA SECCIÓN
     { name: 'Mi Equipo', icon: Icons.Briefcase, desc: 'Tareas de tu departamento' },
     { name: 'Equipo', icon: Icons.Users, desc: 'Miembros del equipo' },
     { name: 'Organigrama', icon: Icons.GitBranch, desc: 'Estructura organizacional' },
@@ -781,10 +784,11 @@ export default function Dashboard() {
               {activeNav === 'Dashboard' && 'Vista general de todas las entregas'}
               {activeNav === 'Mis Tareas' && 'Tareas asignadas a ti'}
               {activeNav === 'Reportes & IA' && 'Centro de inteligencia operativa'}
+              {activeNav === 'Documentos' && 'Archivos y recursos compartidos'}
               {activeNav === 'Mi Equipo' && `Tareas del departamento de ${departmentLabels[user.department]}`}
             </p>
           </div>
-          {activeNav !== 'Reportes & IA' && (
+          {activeNav !== 'Reportes & IA' && activeNav !== 'Documentos' && (
             <button onClick={() => setShowCreateModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', padding: '10px 20px', fontSize: '13px', fontWeight: 500, color: 'white', border: 'none', cursor: 'pointer', boxShadow: '0 4px 20px rgba(99,102,241,0.3)' }}><Icons.Plus />Nueva Tarea</button>
           )}
         </header>
@@ -838,9 +842,14 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* NUEVA VISTA: REPORTES & IA */}
+          {/* VISTA: REPORTES & IA */}
           {activeNav === 'Reportes & IA' && (
             <ReportsView />
+          )}
+
+          {/* VISTA: DOCUMENTOS (NUEVA) */}
+          {activeNav === 'Documentos' && (
+            <DocumentsView />
           )}
 
           {/* Equipo */}
