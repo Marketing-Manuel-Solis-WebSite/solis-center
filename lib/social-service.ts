@@ -1,128 +1,335 @@
-import { SocialMessage } from '../types'
+import { db } from './firebase'
+import { 
+  collection, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  serverTimestamp, 
+  query, 
+  orderBy, 
+  onSnapshot
+} from 'firebase/firestore'
+import { SocialMessage, SocialPlatform } from '../types'
 
-// ============================================================================
-// SIMULACIÓN DE BASE DE DATOS Y CONEXIÓN A APIS EXTERNAS
-// ============================================================================
-
-// DATOS REALISTAS PARA UN DESPACHO LEGAL (Solis Center)
-const MOCK_DB: SocialMessage[] = [
-  { 
-    id: 'msg_001', 
-    platform: 'whatsapp', 
-    senderName: 'Roberto Martínez', 
-    senderHandle: '+52 55 8923 1234', 
-    content: 'Hola, tuve un accidente en la I-45 ayer. La otra persona no tenía seguro y la policía ya me dio el reporte. ¿Me pueden ayudar con la demanda? Tengo fotos de los daños.', 
-    timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // Hace 5 min
-    status: 'unread', 
-    senderAvatar: 'RM',
-    intent: 'consulta_legal',
-    leadScore: 95
-  },
-  { 
-    id: 'msg_002', 
-    platform: 'facebook', 
-    senderName: 'Laura Elena García', 
-    senderHandle: 'Laura García', 
-    content: 'Buenas tardes. Vi su anuncio sobre casos de compensación laboral. Mi esposo se lastimó la espalda en una construcción en Houston y el jefe dice que no es su responsabilidad. ¿Cobran por la primera consulta?', 
-    timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // Hace 45 min
-    status: 'unread', 
-    senderAvatar: 'LG',
-    intent: 'consulta_legal',
-    leadScore: 88
-  },
-  { 
-    id: 'msg_003', 
-    platform: 'instagram', 
-    senderName: 'Javier.Mtz99', 
-    senderHandle: '@javier_mtz_tx', 
-    content: '¿Tienen oficinas en San Antonio? Necesito renovar mi DACA y no estoy seguro si califico para el nuevo proceso.', 
-    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), // Hace 2 horas
-    status: 'read', 
-    senderAvatar: 'JM',
-    intent: 'general',
-    leadScore: 60
-  },
-  { 
-    id: 'msg_004', 
-    platform: 'tiktok', 
-    senderName: 'User992834', 
-    senderHandle: '@user992834', 
-    content: 'Precio de la consulta para divorcio?', 
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // Ayer
-    status: 'replied', 
-    senderAvatar: 'U',
-    intent: 'precios',
-    leadScore: 30
-  },
-  { 
-    id: 'msg_005', 
-    platform: 'messenger', 
-    senderName: 'Patricia Solis', 
-    senderHandle: 'Patricia Solis', 
-    content: 'Ya envié los documentos que me pidió la abogada Ana por correo. ¿Me confirman si les llegaron? Es sobre el caso #4492-B', 
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 25).toISOString(), // Ayer
-    status: 'read', 
-    senderAvatar: 'PS',
-    intent: 'general',
-    leadScore: 75
-  },
-  { 
-    id: 'msg_006', 
-    platform: 'whatsapp', 
-    senderName: 'Ing. Carlos Vela', 
-    senderHandle: '+1 210 555 0192', 
-    content: 'Urgente: Migración detuvo a un empleado mío esta mañana. Necesito representación inmediata. ¿A quién contacto?', 
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), // Hace 2 días
-    status: 'replied', 
-    senderAvatar: 'CV',
-    intent: 'consulta_legal',
-    leadScore: 99
-  }
-]
-
-/**
- * SERVICIO DE MENSAJERÍA UNIFICADA
- * Aquí es donde integrarás las APIs reales (Twilio, Meta Graph API, TikTok API, etc.)
- */
-export const socialService = {
+// ==================== CONFIGURACIÓN DE APIS ====================
+// Configura estas variables en tu archivo .env.local
+const API_CONFIG = {
+  META_GRAPH_URL: process.env.NEXT_PUBLIC_META_GRAPH_URL || 'https://graph.facebook.com/v19.0',
+  WHATSAPP_PHONE_ID: process.env.NEXT_PUBLIC_WHATSAPP_PHONE_ID,
+  WHATSAPP_TOKEN: process.env.NEXT_PUBLIC_WHATSAPP_TOKEN,
   
-  // 1. OBTENER MENSAJES (GET)
-  // Conectar con: GET /api/messages o Webhooks de Twilio/Meta
-  async getMessages(): Promise<SocialMessage[]> {
-    // SIMULACIÓN DE RETRASO DE RED (API REAL)
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve([...MOCK_DB])
-      }, 800) 
-    })
+  // Instagram (usa Graph API de Meta)
+  INSTAGRAM_ACCOUNT_ID: process.env.NEXT_PUBLIC_INSTAGRAM_ACCOUNT_ID,
+  INSTAGRAM_TOKEN: process.env.NEXT_PUBLIC_INSTAGRAM_TOKEN,
+  
+  // Facebook Messenger (usa Graph API de Meta)
+  MESSENGER_PAGE_ID: process.env.NEXT_PUBLIC_MESSENGER_PAGE_ID,
+  MESSENGER_TOKEN: process.env.NEXT_PUBLIC_MESSENGER_TOKEN,
+  
+  // TikTok
+  TIKTOK_URL: 'https://open.tiktokapis.com/v2/message/send/',
+  TIKTOK_TOKEN: process.env.NEXT_PUBLIC_TIKTOK_TOKEN,
+}
 
-    // --- CÓDIGO PARA API REAL ---
-    // const response = await fetch('https://tu-backend.com/api/social-inbox')
-    // return await response.json()
+export const socialService = {
+
+  // ==================== 1. ESCUCHAR MENSAJES EN TIEMPO REAL ====================
+  subscribeToMessages: (callback: (msgs: SocialMessage[]) => void) => {
+    const q = query(collection(db, 'social_messages'), orderBy('timestamp', 'desc'))
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SocialMessage[]
+      callback(messages)
+    })
   },
 
-  // 2. ENVIAR RESPUESTA (POST)
-  // Conectar con: POST /api/send-message (que a su vez llama a Twilio/Meta)
-  async sendMessage(platform: string, recipientId: string, text: string): Promise<boolean> {
-    console.log(`[API MOCK] Enviando a ${platform} (${recipientId}): ${text}`)
-    
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(true)
-      }, 1000)
-    })
+  // ==================== 2. ENVIAR MENSAJE A API EXTERNA ====================
+  sendMessage: async (platform: SocialPlatform, recipientId: string, text: string, user: any) => {
+    try {
+      let apiSuccess = false
 
-    // --- CÓDIGO PARA API REAL ---
-    // const response = await fetch('https://tu-backend.com/api/send', {
-    //   method: 'POST',
-    //   body: JSON.stringify({ platform, recipientId, text })
-    // })
-    // return response.ok
+      // A) Llamada a la API Real según la plataforma
+      switch (platform) {
+        case 'whatsapp':
+          if (!API_CONFIG.WHATSAPP_PHONE_ID || !API_CONFIG.WHATSAPP_TOKEN) {
+            throw new Error('Configuración de WhatsApp incompleta en .env.local')
+          }
+          
+          const whatsappResponse = await fetch(
+            `${API_CONFIG.META_GRAPH_URL}/${API_CONFIG.WHATSAPP_PHONE_ID}/messages`, 
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${API_CONFIG.WHATSAPP_TOKEN}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: recipientId,
+                type: 'text',
+                text: { body: text }
+              })
+            }
+          )
+          
+          if (!whatsappResponse.ok) {
+            const errorData = await whatsappResponse.json()
+            console.error('Error WhatsApp API:', errorData)
+            throw new Error('Fallo al enviar mensaje a WhatsApp API')
+          }
+          apiSuccess = true
+          break
+
+        case 'instagram':
+          if (!API_CONFIG.INSTAGRAM_ACCOUNT_ID || !API_CONFIG.INSTAGRAM_TOKEN) {
+            throw new Error('Configuración de Instagram incompleta en .env.local')
+          }
+          
+          const igResponse = await fetch(
+            `${API_CONFIG.META_GRAPH_URL}/${API_CONFIG.INSTAGRAM_ACCOUNT_ID}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${API_CONFIG.INSTAGRAM_TOKEN}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                recipient: { id: recipientId },
+                message: { text }
+              })
+            }
+          )
+          
+          if (!igResponse.ok) {
+            const errorData = await igResponse.json()
+            console.error('Error Instagram API:', errorData)
+            throw new Error('Fallo al enviar mensaje a Instagram API')
+          }
+          apiSuccess = true
+          break
+
+        case 'messenger':
+          if (!API_CONFIG.MESSENGER_PAGE_ID || !API_CONFIG.MESSENGER_TOKEN) {
+            throw new Error('Configuración de Messenger incompleta en .env.local')
+          }
+          
+          const messengerResponse = await fetch(
+            `${API_CONFIG.META_GRAPH_URL}/${API_CONFIG.MESSENGER_PAGE_ID}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${API_CONFIG.MESSENGER_TOKEN}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                recipient: { id: recipientId },
+                message: { text }
+              })
+            }
+          )
+          
+          if (!messengerResponse.ok) {
+            const errorData = await messengerResponse.json()
+            console.error('Error Messenger API:', errorData)
+            throw new Error('Fallo al enviar mensaje a Messenger API')
+          }
+          apiSuccess = true
+          break
+
+        case 'facebook':
+          // Facebook Pages usa la misma API que Messenger
+          if (!API_CONFIG.MESSENGER_PAGE_ID || !API_CONFIG.MESSENGER_TOKEN) {
+            throw new Error('Configuración de Facebook incompleta en .env.local')
+          }
+          
+          const fbResponse = await fetch(
+            `${API_CONFIG.META_GRAPH_URL}/${API_CONFIG.MESSENGER_PAGE_ID}/feed`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${API_CONFIG.MESSENGER_TOKEN}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                message: text
+              })
+            }
+          )
+          
+          if (!fbResponse.ok) {
+            const errorData = await fbResponse.json()
+            console.error('Error Facebook API:', errorData)
+            throw new Error('Fallo al enviar mensaje a Facebook API')
+          }
+          apiSuccess = true
+          break
+
+        case 'tiktok':
+          if (!API_CONFIG.TIKTOK_TOKEN) {
+            throw new Error('Configuración de TikTok incompleta en .env.local')
+          }
+          
+          const tiktokResponse = await fetch(API_CONFIG.TIKTOK_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${API_CONFIG.TIKTOK_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              recipient_id: recipientId,
+              message: text
+            })
+          })
+          
+          if (!tiktokResponse.ok) {
+            const errorData = await tiktokResponse.json()
+            console.error('Error TikTok API:', errorData)
+            throw new Error('Fallo al enviar mensaje a TikTok API')
+          }
+          apiSuccess = true
+          break
+
+        default:
+          throw new Error(`Plataforma no soportada: ${platform}`)
+      }
+
+      // B) Solo guardar en Firestore si la API respondió OK
+      if (apiSuccess) {
+        await addDoc(collection(db, 'social_messages'), {
+          platform,
+          externalId: `out_${Date.now()}`,
+          senderName: user.name || 'Agente Solis',
+          senderHandle: 'Solis Center',
+          senderAvatar: user.avatar || 'S',
+          content: text,
+          timestamp: serverTimestamp(),
+          status: 'replied',
+          direction: 'outgoing',
+          threadId: recipientId
+        })
+      }
+      
+      return true
+    } catch (error) {
+      console.error('Error crítico enviando mensaje:', error)
+      throw error
+    }
   },
 
-  // 3. MARCAR COMO LEÍDO/RESUELTO
-  async markAsRead(messageId: string): Promise<void> {
-    console.log(`[API MOCK] Marcando mensaje ${messageId} como leído`)
-    // Aquí actualizarías el estado en tu BD (Firebase/Postgres)
+  // ==================== 3. MARCAR COMO LEÍDO ====================
+  markAsRead: async (messageId: string) => {
+    try {
+      const msgRef = doc(db, 'social_messages', messageId)
+      await updateDoc(msgRef, { status: 'read' })
+    } catch (error) {
+      console.error('Error marcando mensaje como leído:', error)
+    }
+  },
+
+  // ==================== 4. ACTUALIZAR ESTADO DE MENSAJE ====================
+  updateMessageStatus: async (messageId: string, newStatus: 'unread' | 'read' | 'replied' | 'resolved' | 'archived') => {
+    try {
+      const msgRef = doc(db, 'social_messages', messageId)
+      await updateDoc(msgRef, { status: newStatus })
+    } catch (error) {
+      console.error('Error actualizando estado del mensaje:', error)
+      throw error
+    }
+  },
+
+  // ==================== 5. RECIBIR WEBHOOK (MENSAJES ENTRANTES) ====================
+  /**
+   * Este método debe ser llamado desde un endpoint API (por ejemplo /api/webhooks/social)
+   * cuando las plataformas envían notificaciones de nuevos mensajes
+   */
+  handleIncomingWebhook: async (platform: SocialPlatform, webhookData: any) => {
+    try {
+      let messageData: Partial<SocialMessage> | null = null
+
+      switch (platform) {
+        case 'whatsapp':
+          // Parsear webhook de WhatsApp Business API
+          if (webhookData.object === 'whatsapp_business_account') {
+            const entry = webhookData.entry?.[0]
+            const change = entry?.changes?.[0]
+            const message = change?.value?.messages?.[0]
+            
+            if (message) {
+              messageData = {
+                platform: 'whatsapp',
+                externalId: message.id,
+                senderName: change.value.contacts?.[0]?.profile?.name || 'Desconocido',
+                senderHandle: message.from,
+                content: message.text?.body || '',
+                timestamp: serverTimestamp(),
+                status: 'unread',
+                direction: 'incoming',
+                threadId: message.from
+              }
+            }
+          }
+          break
+
+        case 'instagram':
+        case 'messenger':
+          // Parsear webhook de Instagram/Messenger (formato similar)
+          if (webhookData.object === 'page' || webhookData.object === 'instagram') {
+            const entry = webhookData.entry?.[0]
+            const messaging = entry?.messaging?.[0]
+            
+            if (messaging?.message) {
+              messageData = {
+                platform,
+                externalId: messaging.message.mid,
+                senderName: messaging.sender.id,
+                senderHandle: messaging.sender.id,
+                content: messaging.message.text || '',
+                timestamp: serverTimestamp(),
+                status: 'unread',
+                direction: 'incoming',
+                threadId: messaging.sender.id
+              }
+            }
+          }
+          break
+
+        case 'tiktok':
+          // Parsear webhook de TikTok
+          if (webhookData.event === 'message') {
+            messageData = {
+              platform: 'tiktok',
+              externalId: webhookData.message_id,
+              senderName: webhookData.sender.display_name || 'Usuario TikTok',
+              senderHandle: webhookData.sender.id,
+              content: webhookData.message.text || '',
+              timestamp: serverTimestamp(),
+              status: 'unread',
+              direction: 'incoming',
+              threadId: webhookData.conversation_id
+            }
+          }
+          break
+      }
+
+      // Guardar mensaje en Firestore
+      if (messageData) {
+        await addDoc(collection(db, 'social_messages'), messageData)
+        return true
+      }
+
+      return false
+    } catch (error) {
+      console.error('Error procesando webhook:', error)
+      throw error
+    }
+  },
+
+  // ==================== 6. ANÁLISIS DE SENTIMIENTO (OPCIONAL CON GEMINI) ====================
+  analyzeSentiment: async (messageContent: string): Promise<'positive' | 'neutral' | 'negative'> => {
+    // Aquí puedes integrar Gemini AI para análisis de sentimiento
+    // Por ahora retornamos 'neutral' como placeholder
+    return 'neutral'
   }
 }

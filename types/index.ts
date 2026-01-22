@@ -79,9 +79,9 @@ export interface Task {
 }
 
 export interface Subtask { 
-  id: string; 
-  title: string; 
-  completed: boolean; 
+  id: string
+  title: string
+  completed: boolean
   createdAt: number 
 }
 
@@ -118,7 +118,7 @@ export interface Comment {
   updatedAt?: Timestamp
 }
 
-// ==================== WORKSPACE (ESTO SOLUCIONA EL ERROR EN STORES) ====================
+// ==================== WORKSPACE ====================
 
 export interface Space {
   id: string
@@ -225,19 +225,23 @@ export interface FormSubmission {
   submittedAt: any
 }
 
-// ==================== SOCIAL INBOX (REALISTA) ====================
+// ==================== SOCIAL INBOX (MEJORADO) ====================
 
 export type SocialPlatform = 'whatsapp' | 'facebook' | 'instagram' | 'tiktok' | 'messenger'
 
 export interface SocialMessage {
   id: string
   platform: SocialPlatform
+  externalId: string
   senderName: string
-  senderHandle?: string
+  senderHandle: string
   senderAvatar?: string
   content: string
-  timestamp: string // Formato legible para UI
-  status: 'unread' | 'read' | 'replied'
-  leadScore?: number // Calificación del lead (1-100)
+  timestamp: any // Firestore Timestamp
+  status: 'unread' | 'read' | 'replied' | 'resolved' | 'archived' // ← AGREGADOS: 'resolved' y 'archived'
+  direction: 'incoming' | 'outgoing'
+  threadId?: string
+  attachments?: string[]
+  leadScore?: number
   intent?: 'consulta_legal' | 'precios' | 'queja' | 'general'
 }

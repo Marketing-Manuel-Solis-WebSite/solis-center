@@ -43,7 +43,6 @@ export default function PublicFormPage({ params }: { params: { id: string } }) {
 
     setSubmitting(true)
     try {
-      // Guardar respuesta
       const submission: Omit<FormSubmission, 'id'> = {
         formId: form.id,
         formTitle: form.title,
@@ -54,7 +53,6 @@ export default function PublicFormPage({ params }: { params: { id: string } }) {
 
       await addDoc(collection(db, 'form_submissions'), submission)
 
-      // Enviar email
       await sendFormResponseNotification({
         to_email: form.notifyEmail,
         form_title: form.title,
