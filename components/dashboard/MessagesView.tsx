@@ -1671,7 +1671,6 @@ export default function MessagesView() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
                 {users.map(u => {
                   const isSelected = selectedMembers.includes(u.id)
-                  
                   return (
                     <div
                       key={u.id}
