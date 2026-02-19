@@ -15,15 +15,15 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { onAuthStateChanged, signOut as firebaseSignOut, User } from 'firebase/auth'
 import { auth } from '../lib/firebase'
-import { useAppStore } from '../stores/useAppStore'
+import { useAppStore, type AppStore } from '../stores/useAppStore'
 import { hierarchyService, taskService, userService, notificationService } from '../lib/firestore-service'
 import type { IUser, UserRef } from '../types/schema'
 
 // ======================== useAuth ========================
 
 export function useAuth() {
-  const setCurrentUser = useAppStore(s => s.setCurrentUser)
-  const currentUser = useAppStore(s => s.currentUser)
+  const setCurrentUser = useAppStore((s: AppStore) => s.setUser)
+  const currentUser = useAppStore((s: AppStore) => s.user)
   const [loading, setLoading] = useState(true)
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null)
 
@@ -58,8 +58,8 @@ export function useAuth() {
 
   const userRef: UserRef | null = currentUser ? {
     id: currentUser.id,
-    name: currentUser.displayName,
-    avatar: currentUser.avatar || currentUser.displayName.charAt(0).toUpperCase(),
+    name: currentUser.name,
+    avatar: currentUser.avatar || currentUser.name.charAt(0).toUpperCase(),
   } : null
 
   return {
@@ -75,7 +75,7 @@ export function useAuth() {
 // ======================== useHierarchy ========================
 
 export function useHierarchy(workspaceId: string | null) {
-  const loading = useAppStore(s => s.hierarchyLoading)
+  const loading = useAppStore((s: AppStore) => s.isLoadingHierarchy)
 
   useEffect(() => {
     if (!workspaceId) return
@@ -93,7 +93,7 @@ export function useHierarchy(workspaceId: string | null) {
 // ======================== useListTasks ========================
 
 export function useListTasks(listId: string | null) {
-  const tasksLoading = useAppStore(s => s.tasksLoading)
+  const tasksLoading = useAppStore((s: AppStore) => s.isLoadingTasks)
 
   useEffect(() => {
     if (!listId) return
@@ -109,8 +109,8 @@ export function useListTasks(listId: string | null) {
 // ======================== useNotifications ========================
 
 export function useNotifications(userId: string | null) {
-  const notifications = useAppStore(s => s.notifications)
-  const unreadCount = useAppStore(s => s.unreadNotificationCount)
+  const notifications = useAppStore((s: AppStore) => s.notifications)
+  const unreadCount = useAppStore((s: AppStore) => s.unreadCount)
 
   useEffect(() => {
     if (!userId) return

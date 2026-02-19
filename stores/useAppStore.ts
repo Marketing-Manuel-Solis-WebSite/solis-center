@@ -420,7 +420,7 @@ export const useAppStore = create<AppStore>()(
           if (!originalTask) return { success: false, error: 'Tarea no encontrada' }
 
           // Aplicar cambio inmediato
-          const updatedTask = { ...originalTask, ...updates, updatedAt: Date.now() }
+          const updatedTask = { ...originalTask, ...updates, updatedAt: Date.now() as any }
           set((s) => ({
             tasks: { ...s.tasks, [taskId]: updatedTask as ITask }
           }))

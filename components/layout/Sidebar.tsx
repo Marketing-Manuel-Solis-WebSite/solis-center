@@ -36,8 +36,8 @@ export default function Sidebar() {
   const setActiveFolder = useAppStore(s => s.setActiveFolder)
   const openModal = useAppStore(s => s.openModal)
   const setRightPanel = useAppStore(s => s.setRightPanel)
-  const currentUser = useAppStore(s => s.currentUser)
-  const unreadCount = useAppStore(s => s.unreadNotificationCount)
+  const currentUser = useAppStore(s => s.user)
+  const unreadCount = useAppStore(s => s.unreadCount)
 
   // Obtener árbol de jerarquía
   const spaces = useAppStore(s => Object.values(s.spaces).sort((a, b) => a.order - b.order))
@@ -219,11 +219,11 @@ export default function Sidebar() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '12px', fontWeight: 700, color: 'white', flexShrink: 0,
           }}>
-            {currentUser.avatar || currentUser.displayName?.charAt(0)?.toUpperCase() || '?'}
+            {currentUser.avatar || currentUser.name?.charAt(0)?.toUpperCase() || '?'}
           </div>
           <div style={{ overflow: 'hidden', flex: 1 }}>
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {currentUser.displayName}
+              {currentUser.name}
             </div>
             <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}>
               {currentUser.role}
